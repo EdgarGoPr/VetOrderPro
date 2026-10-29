@@ -62,7 +62,8 @@ export const OrderFormPage: React.FC = () => {
 
         if (isEditing && id) {
           const existing = await api.orders.getById(id);
-          setFecha(existing.fecha || today);
+          const fallbackToday = new Date().toISOString().split('T')[0];
+          setFecha(existing.fecha || fallbackToday);
           setLaboratorio(existing.laboratorio || '');
           setObservaciones(existing.observaciones || '');
           setItems(existing.items || []);
@@ -75,7 +76,7 @@ export const OrderFormPage: React.FC = () => {
     };
 
     loadData();
-  }, [activeAccount, id, isEditing, today, toast]);
+  }, [activeAccount, id, isEditing, toast]);
 
   // Extract distinct laboratories present in the active catalog
   const availableLaboratories = useMemo(() => {
