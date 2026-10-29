@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Instrument Serif', Georgia, serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #fbfaf7;
+    color: #14261c;
+    min-height: 100vh;
+  }
+}
+
+.font-serif {
+  font-family: 'Instrument Serif', Georgia, serif;
+}
+
+.font-mono {
+  font-family: 'IBM Plex Mono', monospace;
+  font-feature-settings: "tnum" 1;
+}
+
+.font-sans {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Print specific styles for A4 purchase order */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-page-sheet {
+    page-break-after: always;
+    break-after: page;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+
+  .print-page-sheet:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+}
