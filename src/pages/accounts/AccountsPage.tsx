@@ -8,12 +8,13 @@ import {
   Shield,
   Check,
   RotateCcw,
+  UserPlus,
 } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { db } from '../../services/db';
-import type { Account, AccountType, User } from '../../types';
+import type { Account, AccountType, User, UserRole } from '../../types';
 import { generateInitials } from '../../utils/formatters';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
@@ -45,11 +46,11 @@ export const AccountsPage: React.FC = () => {
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
 
-  // Modal State
+  // Account Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
-  // Form Fields
+  // Account Form Fields
   const [nombre, setNombre] = useState<string>('');
   const [tipo, setTipo] = useState<AccountType>('Feedlot');
   const [iniciales, setIniciales] = useState<string>('');
@@ -57,18 +58,29 @@ export const AccountsPage: React.FC = () => {
   const [activo, setActivo] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
 
-  // Delete State
+  // Delete Account State
   const [deleteAccountTarget, setDeleteAccountTarget] = useState<Account | null>(null);
 
+  // User Creation State (Admin only)
+  const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
+  const [userNombre, setUserNombre] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userRol, setUserRol] = useState<UserRole>('user');
+  const [userPassword, setUserPassword] = useState<string>('password123');
+  const [assignToActiveAccount, setAssignToActiveAccount] = useState<boolean>(true);
+  const [savingUser, setSavingUser] = useState<boolean>(false);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
+
+  const fetchUsers = async () => {
+    try {
+      const usersList = await api.auth.getAllUsers();
+      setAllUsers(usersList);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  };
+
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const usersList = await api.auth.getAllUsers();
-        setAllUsers(usersList);
-      } catch (err) {
-        console.error('Error fetching users:', err);
-      }
-    };
     fetchUsers();
   }, []);
 
@@ -167,6 +179,61 @@ export const AccountsPage: React.FC = () => {
     }
   };
 
+  // Create User Handlers
+  const openCreateUserModal = () => {
+    setUserNombre('');
+    setUserEmail('');
+    setUserRol('user');
+    setUserPassword('password123');
+    setAssignToActiveAccount(Boolean(activeAccount));
+    setIsUserModalOpen(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userNombre.trim()) {
+      toast('El nombre del usuario es obligatorio', 'error');
+      return;
+    }
+    if (!userEmail.trim()) {
+      toast('El correo electrónico es obligatorio', 'error');
+      return;
+    }
+
+    try {
+      setSavingUser(true);
+      await api.auth.createUser({
+        nombre: userNombre.trim(),
+        email: userEmail.trim(),
+        rol: userRol,
+        password: userPassword || 'password123',
+        assignToAccountId: assignToActiveAccount && activeAccount ? activeAccount.id : undefined,
+      });
+
+      await fetchUsers();
+      await refreshAccounts();
+      toast('Usuario creado exitosamente', 'success');
+      setIsUserModalOpen(false);
+    } catch (err: any) {
+      toast(err.message || 'Error al crear usuario', 'error');
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+    try {
+      await api.auth.deleteUser(deleteUserTarget.id);
+      await fetchUsers();
+      await refreshAccounts();
+      toast('Usuario eliminado del sistema', 'success');
+      setDeleteUserTarget(null);
+    } catch (err: any) {
+      toast(err.message || 'Error al eliminar usuario', 'error');
+    }
+  };
+
   const handleResetData = () => {
     if (window.confirm('¿Desea restaurar todos los datos originales de muestra (usuarios, feedlots, productos y pedidos)?')) {
       db.resetToDefaults();
@@ -187,7 +254,7 @@ export const AccountsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -197,6 +264,18 @@ export const AccountsPage: React.FC = () => {
           >
             Restaurar demo
           </Button>
+
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={openCreateUserModal}
+              icon={<UserPlus className="w-4 h-4 text-[#1f4e38]" />}
+            >
+              Nuevo usuario
+            </Button>
+          )}
+
           <Button
             variant="primary"
             size="md"
@@ -218,7 +297,7 @@ export const AccountsPage: React.FC = () => {
           {isAdmin ? (
             <span>
               Usted tiene rol <strong>admin</strong>. Puede visualizar y gestionar todas las cuentas
-              del sistema y asignar miembros sin restricciones.
+              del sistema, agregar nuevos usuarios y asignar miembros sin restricciones.
             </span>
           ) : (
             <span>
@@ -238,85 +317,82 @@ export const AccountsPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {accounts.map(acc => {
             const isActive = activeAccount?.id === acc.id;
-            const memberCount = acc.miembros?.length || 0;
 
             return (
               <div
                 key={acc.id}
-                className={`bg-white rounded-2xl p-5 border transition-all duration-150 flex flex-col justify-between ${
+                className={`p-5 rounded-2xl border transition-all duration-150 flex flex-col justify-between relative ${
                   isActive
-                    ? 'border-[#1f4e38] ring-2 ring-[#1f4e38]/15 shadow-sm'
-                    : 'border-stone-200/90 shadow-2xs hover:border-stone-300'
+                    ? 'bg-white border-[#1f4e38] shadow-md ring-1 ring-[#1f4e38]/20'
+                    : 'bg-white/80 border-stone-200/90 hover:border-stone-300 hover:bg-white shadow-2xs'
                 }`}
               >
                 <div>
-                  {/* Top Bar with Initials and Active Badge */}
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="w-12 h-12 rounded-xl border-2 border-stone-800 flex items-center justify-center font-serif text-lg font-bold text-stone-900 bg-stone-50 shadow-xs">
-                      {acc.iniciales}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center font-serif text-sm font-bold text-stone-800 shadow-2xs">
+                        {acc.iniciales}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm text-stone-900 leading-snug">
+                          {acc.nombre}
+                        </h3>
+                        <span className="inline-block text-[10px] font-mono uppercase tracking-wider text-stone-500">
+                          {acc.tipo}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      {isActive ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-[#1f4e38] text-white px-2.5 py-0.5 rounded-full">
-                          <CheckCircle2 className="w-3 h-3" /> Activa
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setActiveAccount(acc)}
-                          className="text-[11px] font-mono text-stone-600 hover:text-[#1f4e38] bg-stone-100 hover:bg-[#1f4e38]/10 px-2.5 py-0.5 rounded-full transition-colors cursor-pointer"
-                        >
-                          Seleccionar
-                        </button>
-                      )}
-                    </div>
+                    {isActive && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#1f4e38]/10 text-[#1f4e38] font-mono shrink-0">
+                        <CheckCircle2 className="w-3 h-3" /> Activa
+                      </span>
+                    )}
                   </div>
 
-                  {/* Account Name & Type */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-serif font-bold text-lg text-stone-900 leading-tight">
-                        {acc.nombre}
-                      </h3>
-                    </div>
-                    <span className="inline-block text-[10px] font-mono uppercase tracking-wider text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">
-                      {acc.tipo}
-                    </span>
-                    {acc.bajada && (
-                      <p className="text-xs text-stone-500 pt-1 line-clamp-2">
-                        {acc.bajada}
-                      </p>
-                    )}
+                  {acc.bajada && (
+                    <p className="text-xs text-stone-600 line-clamp-2 mb-3 font-sans">
+                      {acc.bajada}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-1.5 text-xs text-stone-500 mb-4 font-mono">
+                    <Users className="w-3.5 h-3.5 text-stone-400" />
+                    <span>{acc.miembros?.length || 0} miembros asignados</span>
                   </div>
                 </div>
 
-                {/* Bottom Metadata & Actions */}
-                <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500">
-                  <div className="flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-stone-400" />
-                    <span>
-                      {memberCount} {memberCount === 1 ? 'miembro' : 'miembros'}
+                <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-2">
+                  {!isActive ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveAccount(acc)}
+                      className="text-xs"
+                    >
+                      Establecer como activa
+                    </Button>
+                  ) : (
+                    <span className="text-xs font-mono text-[#1f4e38] font-medium">
+                      Membrete en uso
                     </span>
-                  </div>
+                  )}
 
                   <div className="flex items-center gap-1">
                     <button
-                      type="button"
                       onClick={() => openEditModal(acc)}
-                      className="p-1.5 rounded-md text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
                       title="Editar cuenta"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-4 h-4" />
                     </button>
-                    {accounts.length > 1 && (
+                    {isAdmin && accounts.length > 1 && (
                       <button
-                        type="button"
                         onClick={() => setDeleteAccountTarget(acc)}
-                        className="p-1.5 rounded-md text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                         title="Eliminar cuenta"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
                   </div>
@@ -330,34 +406,48 @@ export const AccountsPage: React.FC = () => {
       {/* Team Management Section for the Active Account */}
       {activeAccount && (
         <div className="bg-white rounded-2xl p-6 border border-stone-200/90 shadow-2xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
             <div>
               <h2 className="font-serif font-bold text-xl text-stone-900 flex items-center gap-2">
                 <Users className="w-5 h-5 text-[#1f4e38]" />
                 Equipo de trabajo: {activeAccount.nombre}
               </h2>
               <p className="text-xs text-stone-500 font-sans mt-0.5">
-                Usuarios con permisos para emitir pedidos y gestionar el catálogo de esta cuenta.
+                Usuarios con permisos para operar en esta cuenta. Haga clic sobre un usuario para vincularlo o desvincularlo.
               </p>
             </div>
-            <span className="text-xs font-mono text-stone-500">
-              {activeAccount.miembros?.length || 0} asignados
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-mono text-stone-500">
+                {activeAccount.miembros?.length || 0} asignados
+              </span>
+              {isAdmin && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={openCreateUserModal}
+                  icon={<UserPlus className="w-3.5 h-3.5" />}
+                >
+                  Nuevo usuario
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {allUsers.map(u => {
               const isAssigned = activeAccount.miembros?.includes(u.id);
+              const isCurrentUser = user?.id === u.id;
 
               return (
                 <div
                   key={u.id}
                   onClick={() => handleToggleMember(u.id)}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 group relative ${
                     isAssigned
-                      ? 'bg-emerald-50/50 border-emerald-300 shadow-2xs'
+                      ? 'bg-emerald-50/50 border-emerald-300 shadow-2xs hover:border-emerald-400'
                       : 'bg-stone-50/70 border-stone-200 hover:border-stone-300'
                   }`}
+                  title={isAssigned ? 'Haga clic para desvincular de la cuenta' : 'Haga clic para vincular a la cuenta'}
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
                     <div
@@ -371,29 +461,52 @@ export const AccountsPage: React.FC = () => {
                     </div>
                     <div className="truncate">
                       <p className="text-xs font-semibold text-stone-900 truncate">
-                        {u.nombre}
+                        {u.nombre} {isCurrentUser && <span className="text-[10px] text-stone-400 font-normal">(tú)</span>}
                       </p>
                       <p className="text-[10px] text-stone-500 font-mono truncate">{u.email}</p>
-                      <span
-                        className={`inline-block text-[9px] font-mono uppercase px-1.5 py-0.2 rounded mt-0.5 ${
-                          u.rol === 'admin'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-stone-100 text-stone-600'
-                        }`}
-                      >
-                        Rol: {u.rol}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`inline-block text-[9px] font-mono uppercase px-1.5 py-0.2 rounded ${
+                            u.rol === 'admin'
+                              ? 'bg-amber-100 text-amber-800 font-semibold'
+                              : 'bg-stone-100 text-stone-600'
+                          }`}
+                        >
+                          Rol: {u.rol}
+                        </span>
+                        {isAssigned && (
+                          <span className="text-[9px] font-mono text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-medium">
+                            Miembro
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div
-                    className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
-                      isAssigned
-                        ? 'bg-[#1f4e38] border-[#1f4e38] text-white'
-                        : 'border-stone-300 bg-white text-transparent'
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-1.5">
+                    {isAdmin && !isCurrentUser && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteUserTarget(u);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        title="Eliminar usuario del sistema"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <div
+                      className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
+                        isAssigned
+                          ? 'bg-[#1f4e38] border-[#1f4e38] text-white'
+                          : 'border-stone-300 bg-white text-transparent'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
                   </div>
                 </div>
               );
@@ -477,6 +590,93 @@ export const AccountsPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Create User Modal (Admin only) */}
+      <Modal
+        isOpen={isUserModalOpen}
+        onClose={() => setIsUserModalOpen(false)}
+        title="Nuevo usuario del sistema"
+        description="Agregue un veterinario o miembro de equipo con acceso a VetOrder Pro."
+      >
+        <form onSubmit={handleSaveUser} className="space-y-4">
+          <Input
+            label="Nombre y Apellido / Matrícula"
+            placeholder="Ej: Dra. Sofía Martínez, Dr. Esteban Paz..."
+            value={userNombre}
+            onChange={e => setUserNombre(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Correo electrónico"
+            type="email"
+            placeholder="sofia.martinez@vetorder.pro"
+            value={userEmail}
+            onChange={e => setUserEmail(e.target.value)}
+            required
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Rol en el sistema"
+              value={userRol}
+              onChange={e => setUserRol(e.target.value as UserRole)}
+            >
+              <option value="user">Usuario (Operador)</option>
+              <option value="admin">Administrador (Total)</option>
+            </Select>
+
+            <Input
+              label="Contraseña inicial"
+              type="text"
+              placeholder="Mínimo 6 caracteres"
+              value={userPassword}
+              onChange={e => setUserPassword(e.target.value)}
+              helperText="Podrá cambiarla al iniciar sesión"
+              required
+            />
+          </div>
+
+          {activeAccount && (
+            <div className="flex items-center gap-2.5 pt-1 bg-stone-50 p-3 rounded-xl border border-stone-200/80">
+              <input
+                type="checkbox"
+                id="assign-account"
+                checked={assignToActiveAccount}
+                onChange={e => setAssignToActiveAccount(e.target.checked)}
+                className="w-4 h-4 text-[#1f4e38] rounded border-stone-300 focus:ring-[#1f4e38]"
+              />
+              <label htmlFor="assign-account" className="text-xs font-medium text-stone-700 cursor-pointer">
+                Asignar automáticamente a la cuenta activa (<strong>{activeAccount.nombre}</strong>)
+              </label>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsUserModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" variant="primary" loading={savingUser}>
+              Crear usuario
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete User Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(deleteUserTarget)}
+        onClose={() => setDeleteUserTarget(null)}
+        onConfirm={handleDeleteUser}
+        title="Eliminar usuario"
+        message={`¿Está seguro de que desea eliminar al usuario "${deleteUserTarget?.nombre}" (${deleteUserTarget?.email}) del sistema? Se desvinculará de todas las cuentas.`}
+        confirmLabel="Eliminar usuario"
+        isTwoStep={true}
+      />
 
       {/* Delete Account Dialog */}
       <ConfirmDialog

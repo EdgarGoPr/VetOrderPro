@@ -1,4 +1,4 @@
-import type { Account, Order, OrderMetrics, PaginatedResponse, Product, User } from '../types';
+import type { Account, Order, OrderMetrics, PaginatedResponse, Product, User, UserRole } from '../types';
 import { db } from './db';
 
 // Simulate slight async network delay for realistic loading skeletons & UI feedback
@@ -48,6 +48,69 @@ export const api = {
       db.saveUsers(users);
       db.setSession(newUser);
       return newUser;
+    },
+
+    async createUser(data: {
+      nombre: string;
+      email: string;
+      rol: UserRole;
+      password?: string;
+      assignToAccountId?: string;
+    }): Promise<User> {
+      await delay(120);
+      const users = db.getUsers();
+      const existing = users.find(u => u.email.toLowerCase() === data.email.toLowerCase().trim());
+      if (existing) {
+        throw new Error('Ya existe un usuario con este correo electrónico.');
+      }
+
+      const newUser: User = {
+        id: `usr-${Date.now()}`,
+        nombre: data.nombre.trim(),
+        email: data.email.trim().toLowerCase(),
+        rol: data.rol,
+        password: data.password || 'password123',
+      };
+
+      users.push(newUser);
+      db.saveUsers(users);
+
+      if (data.assignToAccountId) {
+        const accounts = db.getAccounts();
+        const acc = accounts.find(a => a.id === data.assignToAccountId);
+        if (acc) {
+          if (!acc.miembros) acc.miembros = [];
+          if (!acc.miembros.includes(newUser.id)) {
+            acc.miembros.push(newUser.id);
+            db.saveAccounts(accounts);
+          }
+        }
+      }
+
+      return newUser;
+    },
+
+    async deleteUser(userId: string): Promise<boolean> {
+      await delay(100);
+      let users = db.getUsers();
+      const currentSession = db.getSession();
+      if (currentSession?.id === userId) {
+        throw new Error('No puedes eliminar tu propio usuario en sesión activa.');
+      }
+
+      users = users.filter(u => u.id !== userId);
+      db.saveUsers(users);
+
+      // Clean from account memberships
+      const accounts = db.getAccounts();
+      accounts.forEach(acc => {
+        if (acc.miembros && acc.miembros.includes(userId)) {
+          acc.miembros = acc.miembros.filter(id => id !== userId);
+        }
+      });
+      db.saveAccounts(accounts);
+
+      return true;
     },
 
     async recoverPassword(email: string): Promise<{ success: boolean; message: string; resetToken?: string }> {
