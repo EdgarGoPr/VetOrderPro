@@ -113,6 +113,114 @@ export const api = {
       return true;
     },
 
+    async updateUser(
+      userId: string,
+      data: {
+        nombre?: string;
+        email?: string;
+        rol?: UserRole;
+        password?: string;
+        avatarUrl?: string;
+      }
+    ): Promise<User> {
+      await delay(120);
+      const users = db.getUsers();
+      const index = users.findIndex(u => u.id === userId);
+      if (index === -1) {
+        throw new Error('Usuario no encontrado.');
+      }
+
+      if (data.email) {
+        const cleanEmail = data.email.trim().toLowerCase();
+        const existing = users.find(u => u.email.toLowerCase() === cleanEmail && u.id !== userId);
+        if (existing) {
+          throw new Error('Ya existe otro usuario registrado con este correo electrónico.');
+        }
+        users[index].email = cleanEmail;
+      }
+
+      if (data.nombre !== undefined) {
+        users[index].nombre = data.nombre.trim();
+      }
+
+      if (data.rol !== undefined) {
+        if (users[index].rol === 'admin' && data.rol !== 'admin') {
+          const adminCount = users.filter(u => u.rol === 'admin').length;
+          if (adminCount <= 1) {
+            throw new Error('No puedes remover el rol de administrador al único administrador del sistema.');
+          }
+        }
+        users[index].rol = data.rol;
+      }
+
+      if (data.password && data.password.trim()) {
+        if (data.password.trim().length < 6) {
+          throw new Error('La contraseña debe tener al menos 6 caracteres.');
+        }
+        users[index].password = data.password.trim();
+      }
+
+      if (data.avatarUrl !== undefined) {
+        users[index].avatarUrl = data.avatarUrl;
+      }
+
+      const updatedUser = users[index];
+      db.saveUsers(users);
+
+      const session = db.getSession();
+      if (session && session.id === userId) {
+        db.setSession(updatedUser);
+      }
+
+      return updatedUser;
+    },
+
+    async updateProfile(
+      userId: string,
+      data: {
+        nombre: string;
+        email: string;
+        currentPassword?: string;
+        newPassword?: string;
+        avatarUrl?: string;
+      }
+    ): Promise<User> {
+      await delay(120);
+      const users = db.getUsers();
+      const index = users.findIndex(u => u.id === userId);
+      if (index === -1) {
+        throw new Error('Usuario no encontrado.');
+      }
+
+      const currentUser = users[index];
+
+      if (data.newPassword && data.newPassword.trim()) {
+        if (currentUser.password && data.currentPassword !== currentUser.password) {
+          throw new Error('La contraseña actual ingresada es incorrecta.');
+        }
+        if (data.newPassword.trim().length < 6) {
+          throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
+        }
+        currentUser.password = data.newPassword.trim();
+      }
+
+      const cleanEmail = data.email.trim().toLowerCase();
+      const existing = users.find(u => u.email.toLowerCase() === cleanEmail && u.id !== userId);
+      if (existing) {
+        throw new Error('Ya existe otro usuario registrado con este correo electrónico.');
+      }
+
+      currentUser.nombre = data.nombre.trim();
+      currentUser.email = cleanEmail;
+      if (data.avatarUrl !== undefined) {
+        currentUser.avatarUrl = data.avatarUrl;
+      }
+
+      db.saveUsers(users);
+      db.setSession(currentUser);
+      return currentUser;
+    },
+
     async recoverPassword(email: string): Promise<{ success: boolean; message: string; resetToken?: string }> {
       await delay(120);
       const users = db.getUsers();

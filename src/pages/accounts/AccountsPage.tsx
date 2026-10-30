@@ -71,6 +71,16 @@ export const AccountsPage: React.FC = () => {
   const [savingUser, setSavingUser] = useState<boolean>(false);
   const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
 
+  // User Edit State (Admin only)
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isEditUserModalOpen, setIsEditUserModalOpen] = useState<boolean>(false);
+  const [editUserNombre, setEditUserNombre] = useState<string>('');
+  const [editUserEmail, setEditUserEmail] = useState<string>('');
+  const [editUserRol, setEditUserRol] = useState<UserRole>('user');
+  const [editUserPassword, setEditUserPassword] = useState<string>('');
+  const [editUserAccountIds, setEditUserAccountIds] = useState<string[]>([]);
+  const [savingEditUser, setSavingEditUser] = useState<boolean>(false);
+
   const fetchUsers = async () => {
     try {
       const usersList = await api.auth.getAllUsers();
@@ -231,6 +241,80 @@ export const AccountsPage: React.FC = () => {
       setDeleteUserTarget(null);
     } catch (err: any) {
       toast(err.message || 'Error al eliminar usuario', 'error');
+    }
+  };
+
+  // Edit User Handlers (Admin only)
+  const openEditUserModal = (targetUser: User) => {
+    setEditingUser(targetUser);
+    setEditUserNombre(targetUser.nombre);
+    setEditUserEmail(targetUser.email);
+    setEditUserRol(targetUser.rol);
+    setEditUserPassword('');
+    const assigned = accounts
+      .filter(acc => acc.miembros && acc.miembros.includes(targetUser.id))
+      .map(acc => acc.id);
+    setEditUserAccountIds(assigned);
+    setIsEditUserModalOpen(true);
+  };
+
+  const handleToggleAccountInEditUser = (accountId: string) => {
+    setEditUserAccountIds(prev =>
+      prev.includes(accountId)
+        ? prev.filter(id => id !== accountId)
+        : [...prev, accountId]
+    );
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editUserNombre.trim()) {
+      toast('El nombre del usuario es obligatorio', 'error');
+      return;
+    }
+    if (!editUserEmail.trim()) {
+      toast('El correo electrónico es obligatorio', 'error');
+      return;
+    }
+
+    try {
+      setSavingEditUser(true);
+      await api.auth.updateUser(editingUser.id, {
+        nombre: editUserNombre.trim(),
+        email: editUserEmail.trim().toLowerCase(),
+        rol: editUserRol,
+        password: editUserPassword.trim() ? editUserPassword.trim() : undefined,
+      });
+
+      // Update account memberships for this user
+      const allAccounts = db.getAccounts();
+      let changed = false;
+      allAccounts.forEach(acc => {
+        if (!acc.miembros) acc.miembros = [];
+        const isCurrently = acc.miembros.includes(editingUser.id);
+        const shouldBe = editUserAccountIds.includes(acc.id);
+        if (shouldBe && !isCurrently) {
+          acc.miembros.push(editingUser.id);
+          changed = true;
+        } else if (!shouldBe && isCurrently) {
+          acc.miembros = acc.miembros.filter(id => id !== editingUser.id);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        db.saveAccounts(allAccounts);
+        await refreshAccounts();
+      }
+
+      await fetchUsers();
+      toast('Usuario actualizado exitosamente', 'success');
+      setIsEditUserModalOpen(false);
+    } catch (err: any) {
+      toast(err.message || 'Error al actualizar usuario', 'error');
+    } finally {
+      setSavingEditUser(false);
     }
   };
 
@@ -483,7 +567,20 @@ export const AccountsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditUserModal(u);
+                        }}
+                        className="opacity-70 sm:opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-stone-500 hover:text-[#1f4e38] hover:bg-emerald-50 transition-all cursor-pointer"
+                        title="Editar datos del usuario"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {isAdmin && !isCurrentUser && (
                       <button
                         type="button"
@@ -491,7 +588,7 @@ export const AccountsPage: React.FC = () => {
                           e.stopPropagation();
                           setDeleteUserTarget(u);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        className="opacity-70 sm:opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                         title="Eliminar usuario del sistema"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -507,6 +604,112 @@ export const AccountsPage: React.FC = () => {
                     >
                       <Check className="w-3.5 h-3.5" />
                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Global User Directory (Admin only) */}
+      {isAdmin && (
+        <div className="bg-white rounded-2xl p-6 border border-stone-200/90 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+            <div>
+              <h2 className="font-serif font-bold text-xl text-stone-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-[#1f4e38]" />
+                Directorio general de usuarios ({allUsers.length})
+              </h2>
+              <p className="text-xs text-stone-500 font-sans mt-0.5">
+                Gestión global de miembros del sistema: editar nombres, correos, roles, restablecer contraseñas y asignar cuentas.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openCreateUserModal}
+              icon={<UserPlus className="w-3.5 h-3.5 text-[#1f4e38]" />}
+            >
+              Nuevo usuario
+            </Button>
+          </div>
+
+          <div className="divide-y divide-stone-100">
+            {allUsers.map(u => {
+              const isCurrentUser = user?.id === u.id;
+              const assignedAccounts = accounts.filter(a => a.miembros?.includes(u.id));
+
+              return (
+                <div
+                  key={u.id}
+                  className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/60 px-3 rounded-xl transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center justify-center font-bold text-sm shrink-0">
+                      {u.nombre ? u.nombre[0].toUpperCase() : 'U'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-stone-900">
+                          {u.nombre}
+                        </p>
+                        {isCurrentUser && (
+                          <span className="text-[10px] text-emerald-800 bg-emerald-100/80 px-1.5 py-0.2 rounded font-medium">
+                            Tu sesión
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] font-mono uppercase px-2 py-0.2 rounded font-semibold ${
+                            u.rol === 'admin'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-stone-100 text-stone-600'
+                          }`}
+                        >
+                          Rol: {u.rol}
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-500 font-mono">{u.email}</p>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-[10px] text-stone-400 font-sans">Cuentas:</span>
+                        {assignedAccounts.length > 0 ? (
+                          assignedAccounts.map(acc => (
+                            <span
+                              key={acc.id}
+                              className="text-[9px] font-mono bg-stone-100 border border-stone-200 text-stone-700 px-1.5 py-0.2 rounded"
+                              title={acc.nombre}
+                            >
+                              {acc.iniciales}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[10px] text-stone-400 italic">Sin cuentas asignadas</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEditUserModal(u)}
+                      icon={<Edit2 className="w-3.5 h-3.5 text-[#1f4e38]" />}
+                    >
+                      Editar datos
+                    </Button>
+                    {!isCurrentUser && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteUserTarget(u)}
+                        className="text-stone-400 hover:text-rose-600 hover:bg-rose-50"
+                        title="Eliminar usuario"
+                        icon={<Trash2 className="w-3.5 h-3.5" />}
+                      >
+                        Eliminar
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -662,6 +865,101 @@ export const AccountsPage: React.FC = () => {
             </Button>
             <Button type="submit" variant="primary" loading={savingUser}>
               Crear usuario
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit User Modal (Admin only) */}
+      <Modal
+        isOpen={isEditUserModalOpen}
+        onClose={() => setIsEditUserModalOpen(false)}
+        title={`Editar usuario: ${editingUser?.nombre || ''}`}
+        description="Modifique los datos de acceso, nombre, rol, contraseña y asignaciones de cuentas del usuario."
+      >
+        <form onSubmit={handleSaveEditUser} className="space-y-4">
+          <Input
+            label="Nombre y Apellido / Matrícula"
+            placeholder="Ej: Dra. Valentina Paz"
+            value={editUserNombre}
+            onChange={e => setEditUserNombre(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Correo electrónico"
+            type="email"
+            placeholder="usuario@feedlot.com"
+            value={editUserEmail}
+            onChange={e => setEditUserEmail(e.target.value)}
+            required
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Rol en el sistema"
+              value={editUserRol}
+              onChange={e => setEditUserRol(e.target.value as UserRole)}
+            >
+              <option value="user">Usuario (Operador)</option>
+              <option value="admin">Administrador (Total)</option>
+            </Select>
+
+            <Input
+              label="Nueva contraseña (opcional)"
+              type="text"
+              placeholder="Dejar vacío para no cambiar"
+              value={editUserPassword}
+              onChange={e => setEditUserPassword(e.target.value)}
+              helperText="Mínimo 6 caracteres"
+            />
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-stone-100">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-700">
+              Cuentas y Establecimientos Asignados
+            </label>
+            <p className="text-[11px] text-stone-500">
+              Seleccione los establecimientos en los que este usuario tiene permisos para crear y consultar órdenes.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pt-1">
+              {accounts.map(acc => {
+                const isSelected = editUserAccountIds.includes(acc.id);
+                return (
+                  <label
+                    key={acc.id}
+                    className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-50/70 border-emerald-300 text-stone-900 font-medium'
+                        : 'bg-stone-50/50 border-stone-200 text-stone-600 hover:border-stone-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleAccountInEditUser(acc.id)}
+                      className="w-4 h-4 text-[#1f4e38] rounded border-stone-300 focus:ring-[#1f4e38]"
+                    />
+                    <div className="truncate">
+                      <span className="font-mono text-[10px] text-stone-500 mr-1.5 font-bold">[{acc.iniciales}]</span>
+                      <span>{acc.nombre}</span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditUserModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" variant="primary" loading={savingEditUser}>
+              Guardar cambios
             </Button>
           </div>
         </form>

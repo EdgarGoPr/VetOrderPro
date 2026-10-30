@@ -10,6 +10,8 @@ import {
   UserCheck,
   RefreshCw,
   Truck,
+  User,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { AccountSelector } from './AccountSelector';
@@ -50,6 +52,11 @@ export const Sidebar: React.FC = () => {
       to: '/cuentas',
       label: 'Cuentas y equipo',
       icon: <Building2 className="w-4 h-4" />,
+    },
+    {
+      to: '/perfil',
+      label: 'Mi perfil y clave',
+      icon: <User className="w-4 h-4" />,
     },
   ];
 
@@ -105,22 +112,37 @@ export const Sidebar: React.FC = () => {
       <div className="p-4 border-t border-[#e7e3d8] bg-white/40 space-y-3">
         {/* User Card */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center justify-center font-bold text-xs shrink-0">
+          <NavLink
+            to="/perfil"
+            title="Ver y editar mi perfil"
+            className="flex items-center gap-2.5 overflow-hidden group hover:opacity-85 transition-opacity"
+          >
+            <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center justify-center font-bold text-xs shrink-0 group-hover:ring-2 group-hover:ring-[#1f4e38]/30 transition-all">
               {user?.nombre ? user.nombre[0].toUpperCase() : 'U'}
             </div>
             <div className="truncate">
-              <p className="text-xs font-semibold text-stone-900 truncate">{user?.nombre}</p>
+              <p className="text-xs font-semibold text-stone-900 truncate group-hover:text-[#1f4e38] transition-colors">
+                {user?.nombre}
+              </p>
               <span className="text-[10px] text-stone-500 truncate block font-mono">{user?.email}</span>
             </div>
+          </NavLink>
+          <div className="flex items-center gap-0.5">
+            <NavLink
+              to="/perfil"
+              title="Configuración de mi perfil"
+              className="p-1.5 rounded-lg text-stone-400 hover:text-[#1f4e38] hover:bg-emerald-50 transition-colors cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </NavLink>
+            <button
+              onClick={handleLogout}
+              title="Cerrar sesión"
+              className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            title="Cerrar sesión"
-            className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Role Pill & Demo Switcher */}

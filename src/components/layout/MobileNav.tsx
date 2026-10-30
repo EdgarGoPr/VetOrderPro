@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { ClipboardList, PlusCircle, BookOpen, Building2, Truck } from 'lucide-react';
+import { ClipboardList, PlusCircle, BookOpen, Building2, Truck, User } from 'lucide-react';
 
 export const MobileNav: React.FC = () => {
   const navItems = [
@@ -29,6 +29,11 @@ export const MobileNav: React.FC = () => {
       to: '/cuentas',
       label: 'Cuentas',
       icon: <Building2 className="w-5 h-5" />,
+    },
+    {
+      to: '/perfil',
+      label: 'Perfil',
+      icon: <User className="w-5 h-5" />,
     },
   ];
 

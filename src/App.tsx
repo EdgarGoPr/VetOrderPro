@@ -18,10 +18,11 @@ import { OrdersListPage } from './pages/orders/OrdersListPage';
 import { OrderFormPage } from './pages/orders/OrderFormPage';
 import { OrderDetailPage } from './pages/orders/OrderDetailPage';
 
-// Catalog, Suppliers & Accounts Pages
+// Catalog, Suppliers, Accounts & Profile Pages
 import { CatalogPage } from './pages/catalog/CatalogPage';
 import { SuppliersPage } from './pages/suppliers/SuppliersPage';
 import { AccountsPage } from './pages/accounts/AccountsPage';
+import { ProfilePage } from './pages/profile/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export const App: React.FC = () => {
@@ -60,6 +61,7 @@ export const App: React.FC = () => {
                 <Route path="/proveedores" element={<SuppliersPage />} />
                 <Route path="/catalogo" element={<CatalogPage />} />
                 <Route path="/cuentas" element={<AccountsPage />} />
+                <Route path="/perfil" element={<ProfilePage />} />
 
                 {/* 404 handler inside layout */}
                 <Route path="*" element={<NotFoundPage />} />
