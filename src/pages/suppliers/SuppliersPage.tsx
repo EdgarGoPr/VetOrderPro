@@ -873,9 +873,12 @@ export const SuppliersPage: React.FC = () => {
               value={prodUnidad}
               onChange={e => setProdUnidad(e.target.value as ProductUnit)}
             >
-              <option value="unidad">Unidad</option>
+              <option value="Frasco">Frasco</option>
+              <option value="Bidón">Bidón</option>
+              <option value="Bolsa">Bolsa</option>
+              <option value="Caja">Caja</option>
+              <option value="Unidad">Unidad</option>
               <option value="dosis">Dosis</option>
-              <option value="caja">Caja</option>
             </Select>
 
             <Input

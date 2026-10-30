@@ -47,7 +47,7 @@ export interface Category {
 
 export type ProductCategory = string;
 
-export type ProductUnit = 'unidad' | 'caja' | 'dosis';
+export type ProductUnit = 'unidad' | 'caja' | 'dosis' | 'Frasco' | 'Bidón' | 'Unidad' | 'Caja' | 'Bolsa' | string;
 
 export interface Product {
   id: string;

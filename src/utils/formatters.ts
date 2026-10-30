@@ -12,15 +12,25 @@ import type { ProductUnit } from '../types';
  */
 export function formatUnitNatural(cantidad: number, unidad: ProductUnit): string {
   const qty = Number(cantidad) || 0;
+  const u = (unidad || '').toLowerCase().trim();
   
-  if (unidad === 'unidad') {
+  if (u === 'unidad') {
     return qty === 1 ? '1 unidad' : `${qty} unidades`;
   }
-  if (unidad === 'caja') {
+  if (u === 'caja') {
     return qty === 1 ? '1 caja' : `${qty} cajas`;
   }
-  if (unidad === 'dosis') {
+  if (u === 'dosis') {
     return qty === 1 ? '1 dosis' : `${qty} dosis`;
+  }
+  if (u === 'frasco') {
+    return qty === 1 ? '1 frasco' : `${qty} frascos`;
+  }
+  if (u === 'bidon' || u === 'bidón') {
+    return qty === 1 ? '1 bidón' : `${qty} bidones`;
+  }
+  if (u === 'bolsa') {
+    return qty === 1 ? '1 bolsa' : `${qty} bolsas`;
   }
   return `${qty} ${unidad}`;
 }

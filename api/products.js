@@ -8,12 +8,18 @@ export default async function handler(req, res) {
 
     if (method === 'GET') {
       const { cuenta_id } = req.query || {};
+      let targetCuentaId = cuenta_id;
+      if (cuenta_id === '1' || cuenta_id === 1) {
+        const accs = await sql`SELECT id FROM accounts ORDER BY created_at ASC LIMIT 1;`;
+        if (accs.length > 0) targetCuentaId = accs[0].id;
+      }
+
       let rows;
-      if (cuenta_id) {
+      if (targetCuentaId) {
         rows = await sql`
           SELECT id, cuenta_id, nombre, laboratorio, categoria, presentacion, unidad, minimo, paso, activo, created_at as "createdAt"
           FROM products
-          WHERE cuenta_id = ${cuenta_id}
+          WHERE cuenta_id = ${targetCuentaId}
           ORDER BY categoria ASC, nombre ASC;
         `;
       } else {
@@ -27,8 +33,22 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
-      const { id, cuenta_id, nombre, laboratorio, categoria, presentacion, unidad, minimo, paso, activo } = req.body || {};
-      if (!cuenta_id || !nombre) {
+      let b = req.body || {};
+      if (typeof b === 'string') {
+        try {
+          b = JSON.parse(b);
+        } catch {
+          b = {};
+        }
+      }
+      const { id, cuenta_id, nombre, laboratorio, categoria, presentacion, unidad, minimo, paso, activo } = b;
+      let targetCuentaId = cuenta_id;
+      if (cuenta_id === '1' || cuenta_id === 1) {
+        const accs = await sql`SELECT id FROM accounts ORDER BY created_at ASC LIMIT 1;`;
+        if (accs.length > 0) targetCuentaId = accs[0].id;
+      }
+
+      if (!targetCuentaId || !nombre) {
         return res.status(400).json({ error: 'cuenta_id y nombre son requeridos.' });
       }
 
@@ -37,7 +57,7 @@ export default async function handler(req, res) {
 
       const inserted = await sql`
         INSERT INTO products (id, cuenta_id, nombre, laboratorio, categoria, presentacion, unidad, minimo, paso, activo)
-        VALUES (${prodId}, ${cuenta_id}, ${nombre.trim()}, ${laboratorio || ''}, ${categoria || 'Otros'}, ${presentacion || ''}, ${unidad || 'unidad'}, ${minimo || 1}, ${paso || 1}, ${isActivo})
+        VALUES (${prodId}, ${targetCuentaId}, ${nombre.trim()}, ${laboratorio || ''}, ${categoria || 'Otros'}, ${presentacion || ''}, ${unidad || 'unidad'}, ${minimo || 1}, ${paso || 1}, ${isActivo})
         RETURNING id, cuenta_id, nombre, laboratorio, categoria, presentacion, unidad, minimo, paso, activo, created_at as "createdAt";
       `;
       return res.status(201).json(inserted[0]);

@@ -8,12 +8,18 @@ export default async function handler(req, res) {
 
     if (method === 'GET') {
       const { cuenta_id } = req.query || {};
+      let targetCuentaId = cuenta_id;
+      if (cuenta_id === '1' || cuenta_id === 1) {
+        const accs = await sql`SELECT id FROM accounts ORDER BY created_at ASC LIMIT 1;`;
+        if (accs.length > 0) targetCuentaId = accs[0].id;
+      }
+
       let rows;
-      if (cuenta_id) {
+      if (targetCuentaId) {
         rows = await sql`
           SELECT id, cuenta_id, nombre, descripcion, color, activo, created_at as "createdAt"
           FROM categories
-          WHERE cuenta_id = ${cuenta_id}
+          WHERE cuenta_id = ${targetCuentaId}
           ORDER BY nombre ASC;
         `;
       } else {
