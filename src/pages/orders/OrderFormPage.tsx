@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { api } from '../../services/api';
-import type { OrderItem, Product, ProductUnit } from '../../types';
+import type { OrderItem, Product, ProductUnit, Supplier } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -33,8 +33,9 @@ export const OrderFormPage: React.FC = () => {
   const [observaciones, setObservaciones] = useState<string>('');
   const [items, setItems] = useState<OrderItem[]>([]);
 
-  // Catalog State
+  // Catalog & Suppliers State
   const [catalog, setCatalog] = useState<Product[]>([]);
+  const [registeredSuppliers, setRegisteredSuppliers] = useState<Supplier[]>([]);
   const [catalogSearch, setCatalogSearch] = useState<string>('');
   const [loadingInitial, setLoadingInitial] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -57,8 +58,12 @@ export const OrderFormPage: React.FC = () => {
 
       try {
         setLoadingInitial(true);
-        const products = await api.products.getByAccount(activeAccount.id, { activoOnly: true });
+        const [products, suppliersList] = await Promise.all([
+          api.products.getByAccount(activeAccount.id, { activoOnly: true }),
+          api.suppliers.getByAccount(activeAccount.id),
+        ]);
         setCatalog(products);
+        setRegisteredSuppliers(suppliersList);
 
         if (isEditing && id) {
           const existing = await api.orders.getById(id);
@@ -78,16 +83,21 @@ export const OrderFormPage: React.FC = () => {
     loadData();
   }, [activeAccount, id, isEditing, toast]);
 
-  // Extract distinct laboratories present in the active catalog
+  // Extract distinct laboratories present in registered suppliers or active catalog
   const availableLaboratories = useMemo(() => {
     const labs = new Set<string>();
+    registeredSuppliers.forEach(s => {
+      if (s.nombre && s.nombre.trim()) {
+        labs.add(s.nombre.trim());
+      }
+    });
     catalog.forEach(p => {
       if (p.laboratorio && p.laboratorio.trim()) {
         labs.add(p.laboratorio.trim());
       }
     });
     return Array.from(labs).sort();
-  }, [catalog]);
+  }, [registeredSuppliers, catalog]);
 
   // Filter catalog products for adding: filtered by selected laboratory and search query
   const filteredCatalog = useMemo(() => {

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   UserCheck,
   RefreshCw,
+  Truck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { AccountSelector } from './AccountSelector';
@@ -34,6 +35,11 @@ export const Sidebar: React.FC = () => {
       label: 'Nuevo pedido',
       icon: <PlusCircle className="w-4 h-4" />,
       highlight: true,
+    },
+    {
+      to: '/proveedores',
+      label: 'Proveedores y Labs',
+      icon: <Truck className="w-4 h-4" />,
     },
     {
       to: '/catalogo',

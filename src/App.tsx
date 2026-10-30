@@ -18,8 +18,9 @@ import { OrdersListPage } from './pages/orders/OrdersListPage';
 import { OrderFormPage } from './pages/orders/OrderFormPage';
 import { OrderDetailPage } from './pages/orders/OrderDetailPage';
 
-// Catalog & Accounts Pages
+// Catalog, Suppliers & Accounts Pages
 import { CatalogPage } from './pages/catalog/CatalogPage';
+import { SuppliersPage } from './pages/suppliers/SuppliersPage';
 import { AccountsPage } from './pages/accounts/AccountsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -55,7 +56,8 @@ export const App: React.FC = () => {
                 <Route path="/pedido/:id" element={<OrderDetailPage />} />
                 <Route path="/pedidos/:id" element={<OrderDetailPage />} />
 
-                {/* Catalog & Accounts */}
+                {/* Catalog, Suppliers & Accounts */}
+                <Route path="/proveedores" element={<SuppliersPage />} />
                 <Route path="/catalogo" element={<CatalogPage />} />
                 <Route path="/cuentas" element={<AccountsPage />} />
 

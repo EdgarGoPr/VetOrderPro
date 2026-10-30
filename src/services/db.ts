@@ -1,10 +1,12 @@
-import type { Account, Order, Product, User } from '../types';
+import type { Account, Category, Order, Product, Supplier, User } from '../types';
 
 const STORAGE_KEYS = {
   USERS: 'vetorder_users_v1',
   ACCOUNTS: 'vetorder_accounts_v1',
   PRODUCTS: 'vetorder_products_v1',
   ORDERS: 'vetorder_orders_v1',
+  SUPPLIERS: 'vetorder_suppliers_v1',
+  CATEGORIES: 'vetorder_categories_v1',
   AUTH_SESSION: 'vetorder_session_v1',
   ACTIVE_ACCOUNT: 'vetorder_active_account_id_v1',
 };
@@ -256,6 +258,108 @@ const INITIAL_PRODUCTS: Product[] = [
   },
 ];
 
+// Initial Seed Suppliers (Laboratorios / Proveedores)
+const INITIAL_SUPPLIERS: Supplier[] = [
+  {
+    id: 'sup-fla-01',
+    cuenta_id: 'acc-feedlot-acacias',
+    nombre: 'Zoetis',
+    contacto: 'Dr. Alejandro Dupont',
+    telefono: '+54 9 11 4455-8899',
+    email: 'pedidos@zoetis.com.ar',
+    direccion: 'Av. Libertador 6250, CABA',
+    notas: 'Proveedor principal de biológicos y antibióticos de alta exigencia.',
+    activo: true,
+  },
+  {
+    id: 'sup-fla-02',
+    cuenta_id: 'acc-feedlot-acacias',
+    nombre: 'Biogénesis Bagó',
+    contacto: 'Dra. Mariana Solís',
+    telefono: '+54 9 11 5566-7788',
+    email: 'ventas@biogenesisbago.com',
+    direccion: 'Ruta Panamericana Km 38.5, Garín',
+    notas: 'Cadena de frío estricta para vacunas reproductivas.',
+    activo: true,
+  },
+  {
+    id: 'sup-fla-03',
+    cuenta_id: 'acc-feedlot-acacias',
+    nombre: 'MSD Salud Animal',
+    contacto: 'Ing. Lucas Varela',
+    telefono: '+54 9 11 3344-9900',
+    email: 'contacto.ganaderia@msd.com',
+    direccion: 'Parque Industrial Pilar',
+    notas: 'Entregas semanales los días martes y jueves.',
+    activo: true,
+  },
+  {
+    id: 'sup-fla-04',
+    cuenta_id: 'acc-feedlot-acacias',
+    nombre: 'Boehringer Ingelheim',
+    contacto: 'Valeria Rossi',
+    telefono: '+54 9 11 2233-4455',
+    email: 'atencion@boehringer-ingelheim.com',
+    direccion: 'Av. del Libertador 7208',
+    notas: 'Línea Metacam e Ivomec.',
+    activo: true,
+  },
+  {
+    id: 'sup-fla-05',
+    cuenta_id: 'acc-feedlot-acacias',
+    nombre: 'Insumos Generales',
+    contacto: 'Depósito Central',
+    telefono: '+54 9 2346 55-1234',
+    email: 'deposito@feedlot-insumos.com',
+    notas: 'Material descartable, agujas y jeringas.',
+    activo: true,
+  },
+  {
+    id: 'sup-vsr-01',
+    cuenta_id: 'acc-vet-sanroque',
+    nombre: 'MSD Salud Animal',
+    contacto: 'Distribuidora del Sud',
+    telefono: '+54 9 2266 42-8800',
+    email: 'pedidos@distribuidoradelsud.com',
+    activo: true,
+  },
+  {
+    id: 'sup-vsr-02',
+    cuenta_id: 'acc-vet-sanroque',
+    nombre: 'Biogénesis Bagó',
+    contacto: 'Representante Balcarce',
+    telefono: '+54 9 2266 43-1122',
+    email: 'bago.balcarce@agroveterinaria.com',
+    activo: true,
+  },
+  {
+    id: 'sup-vsr-03',
+    cuenta_id: 'acc-vet-sanroque',
+    nombre: 'Zoetis',
+    contacto: 'Agencia Tandil',
+    telefono: '+54 9 249 444-5566',
+    email: 'tandil@zoetis.com.ar',
+    activo: true,
+  },
+];
+
+// Initial Seed Categories
+const INITIAL_CATEGORIES: Category[] = [
+  { id: 'cat-01', cuenta_id: 'acc-feedlot-acacias', nombre: 'Vacunas', descripcion: 'Biológicos y preventivos', color: '#059669', activo: true },
+  { id: 'cat-02', cuenta_id: 'acc-feedlot-acacias', nombre: 'Antibióticos', descripcion: 'Tratamientos antimicrobianos', color: '#0284c7', activo: true },
+  { id: 'cat-03', cuenta_id: 'acc-feedlot-acacias', nombre: 'Antiinflamatorios', descripcion: 'Analgésicos y antipiréticos', color: '#d97706', activo: true },
+  { id: 'cat-04', cuenta_id: 'acc-feedlot-acacias', nombre: 'Antiparasitarios', descripcion: 'Endectocidas e inmunidad', color: '#7c3aed', activo: true },
+  { id: 'cat-05', cuenta_id: 'acc-feedlot-acacias', nombre: 'Insumos', descripcion: 'Descartables, jeringas y equipos', color: '#57534e', activo: true },
+  { id: 'cat-06', cuenta_id: 'acc-feedlot-acacias', nombre: 'Otros', descripcion: 'Varios y accesorios', color: '#475569', activo: true },
+  // Categories for San Roque
+  { id: 'cat-vsr-01', cuenta_id: 'acc-vet-sanroque', nombre: 'Vacunas', activo: true },
+  { id: 'cat-vsr-02', cuenta_id: 'acc-vet-sanroque', nombre: 'Antibióticos', activo: true },
+  { id: 'cat-vsr-03', cuenta_id: 'acc-vet-sanroque', nombre: 'Antiinflamatorios', activo: true },
+  { id: 'cat-vsr-04', cuenta_id: 'acc-vet-sanroque', nombre: 'Antiparasitarios', activo: true },
+  { id: 'cat-vsr-05', cuenta_id: 'acc-vet-sanroque', nombre: 'Insumos', activo: true },
+  { id: 'cat-vsr-06', cuenta_id: 'acc-vet-sanroque', nombre: 'Otros', activo: true },
+];
+
 // Helper to get current YYYY-MM
 function getCurrentYearMonth() {
   const now = new Date();
@@ -460,6 +564,12 @@ export const db = {
     if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) {
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
     }
+    if (!localStorage.getItem(STORAGE_KEYS.SUPPLIERS)) {
+      localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(INITIAL_SUPPLIERS));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
+      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+    }
     // Default session if none exists
     if (!localStorage.getItem(STORAGE_KEYS.AUTH_SESSION)) {
       localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(INITIAL_USERS[0]));
@@ -475,6 +585,8 @@ export const db = {
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(INITIAL_ACCOUNTS));
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
+    localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(INITIAL_SUPPLIERS));
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
     localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(INITIAL_USERS[0]));
     localStorage.setItem(STORAGE_KEYS.ACTIVE_ACCOUNT, INITIAL_ACCOUNTS[0].id);
   },
@@ -566,5 +678,35 @@ export const db = {
 
   setActiveAccountId(id: string): void {
     localStorage.setItem(STORAGE_KEYS.ACTIVE_ACCOUNT, id);
+  },
+
+  // SUPPLIERS
+  getSuppliers(): Supplier[] {
+    this.init();
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.SUPPLIERS);
+      return data ? JSON.parse(data) : INITIAL_SUPPLIERS;
+    } catch {
+      return INITIAL_SUPPLIERS;
+    }
+  },
+
+  saveSuppliers(suppliers: Supplier[]): void {
+    localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
+  },
+
+  // CATEGORIES
+  getCategories(): Category[] {
+    this.init();
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+      return data ? JSON.parse(data) : INITIAL_CATEGORIES;
+    } catch {
+      return INITIAL_CATEGORIES;
+    }
+  },
+
+  saveCategories(categories: Category[]): void {
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
   },
 };

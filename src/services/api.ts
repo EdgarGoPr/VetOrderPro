@@ -1,4 +1,4 @@
-import type { Account, Order, OrderMetrics, PaginatedResponse, Product, User, UserRole } from '../types';
+import type { Account, Category, Order, OrderMetrics, PaginatedResponse, Product, Supplier, User, UserRole } from '../types';
 import { db } from './db';
 
 // Simulate slight async network delay for realistic loading skeletons & UI feedback
@@ -488,6 +488,126 @@ export const api = {
         throw err;
       }
       db.saveOrders(all);
+      return true;
+    },
+  },
+
+  suppliers: {
+    async getByAccount(accountId: string): Promise<Supplier[]> {
+      await delay(60);
+      const all = db.getSuppliers();
+      return all.filter(s => s.cuenta_id === accountId);
+    },
+
+    async getById(id: string): Promise<Supplier | null> {
+      await delay(40);
+      const all = db.getSuppliers();
+      return all.find(s => s.id === id) || null;
+    },
+
+    async create(supplierData: Omit<Supplier, 'id' | 'createdAt'>): Promise<Supplier> {
+      await delay(90);
+      const all = db.getSuppliers();
+      const newSupplier: Supplier = {
+        ...supplierData,
+        id: `sup-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
+      all.unshift(newSupplier);
+      db.saveSuppliers(all);
+      return newSupplier;
+    },
+
+    async update(id: string, data: Partial<Supplier>): Promise<Supplier> {
+      await delay(80);
+      const all = db.getSuppliers();
+      const index = all.findIndex(s => s.id === id);
+      if (index === -1) throw new Error('Proveedor no encontrado');
+
+      const oldName = all[index].nombre;
+      all[index] = { ...all[index], ...data };
+      db.saveSuppliers(all);
+
+      // If supplier name changed, also update products associated with it
+      if (data.nombre && data.nombre.trim() !== oldName) {
+        const products = db.getProducts();
+        let changed = false;
+        products.forEach(p => {
+          if (p.cuenta_id === all[index].cuenta_id && p.laboratorio.toLowerCase() === oldName.toLowerCase()) {
+            p.laboratorio = data.nombre!.trim();
+            changed = true;
+          }
+        });
+        if (changed) {
+          db.saveProducts(products);
+        }
+      }
+
+      return all[index];
+    },
+
+    async delete(id: string): Promise<boolean> {
+      await delay(80);
+      let all = db.getSuppliers();
+      all = all.filter(s => s.id !== id);
+      db.saveSuppliers(all);
+      return true;
+    },
+  },
+
+  categories: {
+    async getByAccount(accountId: string): Promise<Category[]> {
+      await delay(50);
+      const all = db.getCategories();
+      return all.filter(c => c.cuenta_id === accountId);
+    },
+
+    async create(categoryData: Omit<Category, 'id' | 'createdAt'>): Promise<Category> {
+      await delay(80);
+      const all = db.getCategories();
+      const newCat: Category = {
+        ...categoryData,
+        id: `cat-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
+      all.push(newCat);
+      db.saveCategories(all);
+      return newCat;
+    },
+
+    async update(id: string, data: Partial<Category>): Promise<Category> {
+      await delay(70);
+      const all = db.getCategories();
+      const index = all.findIndex(c => c.id === id);
+      if (index === -1) throw new Error('Categoría no encontrada');
+
+      const oldName = all[index].nombre;
+      all[index] = { ...all[index], ...data };
+      db.saveCategories(all);
+
+      // If category name changed, update products using this category
+      if (data.nombre && data.nombre.trim() !== oldName) {
+        const products = db.getProducts();
+        let changed = false;
+        products.forEach(p => {
+          if (p.cuenta_id === all[index].cuenta_id && p.categoria === oldName) {
+            p.categoria = data.nombre!.trim();
+            changed = true;
+          }
+        });
+        if (changed) {
+          db.saveProducts(products);
+        }
+      }
+
+      return all[index];
+    },
+
+    async delete(id: string): Promise<boolean> {
+      await delay(70);
+      let all = db.getCategories();
+      all = all.filter(c => c.id !== id);
+      db.saveCategories(all);
       return true;
     },
   },

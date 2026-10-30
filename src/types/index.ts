@@ -22,13 +22,30 @@ export interface Account {
   createdAt: string;
 }
 
-export type ProductCategory = 
-  | 'Vacunas' 
-  | 'Antibióticos' 
-  | 'Antiinflamatorios' 
-  | 'Insumos' 
-  | 'Antiparasitarios'
-  | 'Otros';
+export interface Supplier {
+  id: string;
+  cuenta_id: string;
+  nombre: string;
+  contacto?: string;
+  telefono?: string;
+  email?: string;
+  direccion?: string;
+  notas?: string;
+  activo: boolean;
+  createdAt?: string;
+}
+
+export interface Category {
+  id: string;
+  cuenta_id: string;
+  nombre: string;
+  descripcion?: string;
+  color?: string;
+  activo: boolean;
+  createdAt?: string;
+}
+
+export type ProductCategory = string;
 
 export type ProductUnit = 'unidad' | 'caja' | 'dosis';
 
