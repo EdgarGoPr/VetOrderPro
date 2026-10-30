@@ -33,10 +33,12 @@ export const OrderDetailPage: React.FC = () => {
   const fetchOrder = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    setNotFound(false);
-
     try {
       const orderData = await api.orders.getById(id);
+      if (!orderData) {
+        setNotFound(true);
+        return;
+      }
       setOrder(orderData);
 
       // Find the account for this order

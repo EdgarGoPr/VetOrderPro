@@ -67,11 +67,15 @@ export const OrderFormPage: React.FC = () => {
 
         if (isEditing && id) {
           const existing = await api.orders.getById(id);
-          const fallbackToday = new Date().toISOString().split('T')[0];
-          setFecha(existing.fecha || fallbackToday);
-          setLaboratorio(existing.laboratorio || '');
-          setObservaciones(existing.observaciones || '');
-          setItems(existing.items || []);
+          if (existing) {
+            const fallbackToday = new Date().toISOString().split('T')[0];
+            setFecha(existing.fecha || fallbackToday);
+            setLaboratorio(existing.laboratorio || '');
+            setObservaciones(existing.observaciones || '');
+            setItems(existing.items || []);
+          } else {
+            toast('No se encontró la orden solicitada', 'error');
+          }
         }
       } catch (err: any) {
         toast(err.message || 'Error cargando datos', 'error');

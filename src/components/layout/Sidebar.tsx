@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   ClipboardList,
@@ -14,11 +14,28 @@ import {
   Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
 import { AccountSelector } from './AccountSelector';
 
 export const Sidebar: React.FC = () => {
   const { user, isAdmin, logout, switchDemoUser } = useAuth();
   const navigate = useNavigate();
+
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; loading: boolean }>({
+    connected: false,
+    loading: true,
+  });
+
+  useEffect(() => {
+    api.health
+      .check()
+      .then(res => {
+        setDbStatus({ connected: Boolean(res.connected), loading: false });
+      })
+      .catch(() => {
+        setDbStatus({ connected: false, loading: false });
+      });
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -170,6 +187,33 @@ export const Sidebar: React.FC = () => {
             <RefreshCw className="w-3 h-3" />
             <span>{isAdmin ? 'A Usuario' : 'A Admin'}</span>
           </button>
+        </div>
+
+        {/* Database Status Indicator */}
+        <div className="flex items-center justify-between text-[10px] text-stone-500 font-mono px-1 pt-0.5">
+          <span className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                dbStatus.loading
+                  ? 'bg-stone-300 animate-pulse'
+                  : dbStatus.connected
+                  ? 'bg-emerald-500 shadow-xs'
+                  : 'bg-amber-400'
+              }`}
+            />
+            <span className="truncate">
+              {dbStatus.loading
+                ? 'Comprobando DB...'
+                : dbStatus.connected
+                ? 'Neon DB Conectada'
+                : 'Almacenamiento Local'}
+            </span>
+          </span>
+          {dbStatus.connected && (
+            <span className="text-[9px] text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-1 py-0.2 rounded font-semibold shrink-0">
+              Postgres
+            </span>
+          )}
         </div>
       </div>
     </aside>

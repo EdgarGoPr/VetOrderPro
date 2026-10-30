@@ -4,7 +4,50 @@ import { db } from './db';
 // Simulate slight async network delay for realistic loading skeletons & UI feedback
 const delay = (ms: number = 80) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Helper to call Serverless API (Neon PostgreSQL) with graceful fallback to localStorage
+ */
+async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T | null> {
+  try {
+    const res = await fetch(`/api/${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      ...options,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn(`[Neon API] Solicitud /api/${endpoint} derivada al almacenamiento local:`, err);
+    return null;
+  }
+}
+
 export const api = {
+  health: {
+    async check(): Promise<{
+      status: string;
+      connected: boolean;
+      provider: string;
+      host?: string;
+      usersCount?: number;
+      message?: string;
+    }> {
+      const data = await fetchApi<any>('health');
+      if (data) return data;
+      return {
+        status: 'warning',
+        connected: false,
+        provider: 'Navegador Local',
+        message: 'No se pudo conectar con el endpoint /api/health.',
+      };
+    },
+  },
+
   auth: {
     async getCurrentUser(): Promise<User | null> {
       await delay(40);
@@ -12,7 +55,13 @@ export const api = {
     },
 
     async login(email: string, password?: string): Promise<User> {
-      await delay(120);
+      await delay(100);
+      // Try to load fresh users from Neon
+      const neonUsers = await fetchApi<User[]>('users');
+      if (neonUsers && Array.isArray(neonUsers) && neonUsers.length > 0) {
+        db.saveUsers(neonUsers);
+      }
+
       const users = db.getUsers();
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
       
@@ -29,23 +78,13 @@ export const api = {
     },
 
     async register(nombre: string, email: string, password?: string): Promise<User> {
-      await delay(150);
-      const users = db.getUsers();
-      const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
-      if (existing) {
-        throw new Error('Ya existe un usuario con este correo electrónico.');
-      }
-
-      const newUser: User = {
-        id: `usr-${Date.now()}`,
+      await delay(120);
+      const newUser = await this.createUser({
         nombre,
-        email: email.trim().toLowerCase(),
-        rol: 'user', // Default role
+        email,
+        rol: 'user',
         password: password || 'password123',
-      };
-
-      users.push(newUser);
-      db.saveUsers(users);
+      });
       db.setSession(newUser);
       return newUser;
     },
@@ -57,7 +96,34 @@ export const api = {
       password?: string;
       assignToAccountId?: string;
     }): Promise<User> {
-      await delay(120);
+      await delay(100);
+
+      // 1. Send to Neon Database
+      const createdInNeon = await fetchApi<User>('users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+
+      if (createdInNeon) {
+        const users = db.getUsers().filter(u => u.id !== createdInNeon.id);
+        users.push(createdInNeon);
+        db.saveUsers(users);
+
+        if (data.assignToAccountId) {
+          const accounts = db.getAccounts();
+          const acc = accounts.find(a => a.id === data.assignToAccountId);
+          if (acc) {
+            if (!acc.miembros) acc.miembros = [];
+            if (!acc.miembros.includes(createdInNeon.id)) {
+              acc.miembros.push(createdInNeon.id);
+              db.saveAccounts(accounts);
+            }
+          }
+        }
+        return createdInNeon;
+      }
+
+      // Fallback local storage
       const users = db.getUsers();
       const existing = users.find(u => u.email.toLowerCase() === data.email.toLowerCase().trim());
       if (existing) {
@@ -74,34 +140,23 @@ export const api = {
 
       users.push(newUser);
       db.saveUsers(users);
-
-      if (data.assignToAccountId) {
-        const accounts = db.getAccounts();
-        const acc = accounts.find(a => a.id === data.assignToAccountId);
-        if (acc) {
-          if (!acc.miembros) acc.miembros = [];
-          if (!acc.miembros.includes(newUser.id)) {
-            acc.miembros.push(newUser.id);
-            db.saveAccounts(accounts);
-          }
-        }
-      }
-
       return newUser;
     },
 
     async deleteUser(userId: string): Promise<boolean> {
       await delay(100);
-      let users = db.getUsers();
       const currentSession = db.getSession();
       if (currentSession?.id === userId) {
         throw new Error('No puedes eliminar tu propio usuario en sesión activa.');
       }
 
-      users = users.filter(u => u.id !== userId);
+      // 1. Delete in Neon
+      await fetchApi(`users?id=${userId}`, { method: 'DELETE' });
+
+      // 2. Delete locally
+      let users = db.getUsers().filter(u => u.id !== userId);
       db.saveUsers(users);
 
-      // Clean from account memberships
       const accounts = db.getAccounts();
       accounts.forEach(acc => {
         if (acc.miembros && acc.miembros.includes(userId)) {
@@ -123,7 +178,25 @@ export const api = {
         avatarUrl?: string;
       }
     ): Promise<User> {
-      await delay(120);
+      await delay(100);
+
+      // 1. Send update to Neon
+      const updatedInNeon = await fetchApi<User>('users', {
+        method: 'PUT',
+        body: JSON.stringify({ id: userId, ...data }),
+      });
+
+      if (updatedInNeon) {
+        const users = db.getUsers().map(u => u.id === userId ? { ...u, ...updatedInNeon } : u);
+        db.saveUsers(users);
+        const session = db.getSession();
+        if (session && session.id === userId) {
+          db.setSession(updatedInNeon);
+        }
+        return updatedInNeon;
+      }
+
+      // Fallback local
       const users = db.getUsers();
       const index = users.findIndex(u => u.id === userId);
       if (index === -1) {
@@ -139,30 +212,10 @@ export const api = {
         users[index].email = cleanEmail;
       }
 
-      if (data.nombre !== undefined) {
-        users[index].nombre = data.nombre.trim();
-      }
-
-      if (data.rol !== undefined) {
-        if (users[index].rol === 'admin' && data.rol !== 'admin') {
-          const adminCount = users.filter(u => u.rol === 'admin').length;
-          if (adminCount <= 1) {
-            throw new Error('No puedes remover el rol de administrador al único administrador del sistema.');
-          }
-        }
-        users[index].rol = data.rol;
-      }
-
-      if (data.password && data.password.trim()) {
-        if (data.password.trim().length < 6) {
-          throw new Error('La contraseña debe tener al menos 6 caracteres.');
-        }
-        users[index].password = data.password.trim();
-      }
-
-      if (data.avatarUrl !== undefined) {
-        users[index].avatarUrl = data.avatarUrl;
-      }
+      if (data.nombre !== undefined) users[index].nombre = data.nombre.trim();
+      if (data.rol !== undefined) users[index].rol = data.rol;
+      if (data.password && data.password.trim()) users[index].password = data.password.trim();
+      if (data.avatarUrl !== undefined) users[index].avatarUrl = data.avatarUrl;
 
       const updatedUser = users[index];
       db.saveUsers(users);
@@ -185,40 +238,23 @@ export const api = {
         avatarUrl?: string;
       }
     ): Promise<User> {
-      await delay(120);
+      await delay(100);
       const users = db.getUsers();
       const index = users.findIndex(u => u.id === userId);
-      if (index === -1) {
-        throw new Error('Usuario no encontrado.');
-      }
-
-      const currentUser = users[index];
+      const currentUser = index !== -1 ? users[index] : null;
 
       if (data.newPassword && data.newPassword.trim()) {
-        if (currentUser.password && data.currentPassword !== currentUser.password) {
+        if (currentUser?.password && data.currentPassword !== currentUser.password) {
           throw new Error('La contraseña actual ingresada es incorrecta.');
         }
-        if (data.newPassword.trim().length < 6) {
-          throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
-        }
-        currentUser.password = data.newPassword.trim();
       }
 
-      const cleanEmail = data.email.trim().toLowerCase();
-      const existing = users.find(u => u.email.toLowerCase() === cleanEmail && u.id !== userId);
-      if (existing) {
-        throw new Error('Ya existe otro usuario registrado con este correo electrónico.');
-      }
-
-      currentUser.nombre = data.nombre.trim();
-      currentUser.email = cleanEmail;
-      if (data.avatarUrl !== undefined) {
-        currentUser.avatarUrl = data.avatarUrl;
-      }
-
-      db.saveUsers(users);
-      db.setSession(currentUser);
-      return currentUser;
+      return this.updateUser(userId, {
+        nombre: data.nombre,
+        email: data.email,
+        password: data.newPassword,
+        avatarUrl: data.avatarUrl,
+      });
     },
 
     async recoverPassword(email: string): Promise<{ success: boolean; message: string; resetToken?: string }> {
@@ -253,43 +289,55 @@ export const api = {
     },
 
     async getAllUsers(): Promise<User[]> {
-      await delay(60);
+      const neonUsers = await fetchApi<User[]>('users');
+      if (neonUsers && Array.isArray(neonUsers) && neonUsers.length > 0) {
+        db.saveUsers(neonUsers);
+        return neonUsers;
+      }
       return db.getUsers();
     },
   },
 
   accounts: {
-    /**
-     * Get accounts visible to the given user:
-     * - Admin sees ALL accounts.
-     * - User sees accounts where they are a member.
-     *   (If they have no accounts assigned, they see all accounts).
-     */
     async getVisibleAccounts(user: User | null): Promise<Account[]> {
-      await delay(60);
+      // 1. Try to fetch from Neon
+      const neonAccounts = await fetchApi<Account[]>('accounts');
+      if (neonAccounts && Array.isArray(neonAccounts) && neonAccounts.length > 0) {
+        db.saveAccounts(neonAccounts);
+        if (!user) return [];
+        if (user.rol === 'admin') return neonAccounts;
+
+        const userAccounts = neonAccounts.filter(acc => acc.miembros && acc.miembros.includes(user.id));
+        return userAccounts.length === 0 ? neonAccounts : userAccounts;
+      }
+
+      // Fallback local
       const all = db.getAccounts();
       if (!user) return [];
-
-      if (user.rol === 'admin') {
-        return all;
-      }
+      if (user.rol === 'admin') return all;
 
       const userAccounts = all.filter(acc => acc.miembros && acc.miembros.includes(user.id));
-      if (userAccounts.length === 0) {
-        // If user is not assigned to any account, fallback to seeing all accounts as specified
-        return all;
-      }
-      return userAccounts;
+      return userAccounts.length === 0 ? all : userAccounts;
     },
 
     async getById(id: string): Promise<Account | null> {
-      await delay(50);
       const accounts = db.getAccounts();
       return accounts.find(a => a.id === id) || null;
     },
 
     async create(accountData: Omit<Account, 'id' | 'createdAt'>): Promise<Account> {
-      await delay(100);
+      const created = await fetchApi<Account>('accounts', {
+        method: 'POST',
+        body: JSON.stringify(accountData),
+      });
+
+      if (created) {
+        const accounts = db.getAccounts().filter(a => a.id !== created.id);
+        accounts.push(created);
+        db.saveAccounts(accounts);
+        return created;
+      }
+
       const accounts = db.getAccounts();
       const newAccount: Account = {
         ...accountData,
@@ -302,7 +350,17 @@ export const api = {
     },
 
     async update(id: string, data: Partial<Account>): Promise<Account> {
-      await delay(100);
+      const updated = await fetchApi<Account>('accounts', {
+        method: 'PUT',
+        body: JSON.stringify({ id, ...data }),
+      });
+
+      if (updated) {
+        const accounts = db.getAccounts().map(a => a.id === id ? { ...a, ...updated } : a);
+        db.saveAccounts(accounts);
+        return updated;
+      }
+
       const accounts = db.getAccounts();
       const index = accounts.findIndex(a => a.id === id);
       if (index === -1) throw new Error('Cuenta no encontrada');
@@ -313,23 +371,26 @@ export const api = {
     },
 
     async delete(id: string): Promise<boolean> {
-      await delay(100);
-      let accounts = db.getAccounts();
-      accounts = accounts.filter(a => a.id !== id);
+      await fetchApi(`accounts?id=${id}`, { method: 'DELETE' });
+      let accounts = db.getAccounts().filter(a => a.id !== id);
       db.saveAccounts(accounts);
 
-      // Also clean up or notify
-      if (db.getActiveAccountId() === id) {
-        const remaining = accounts[0];
-        if (remaining) {
-          db.setActiveAccountId(remaining.id);
-        }
+      if (db.getActiveAccountId() === id && accounts[0]) {
+        db.setActiveAccountId(accounts[0].id);
       }
       return true;
     },
 
     async assignMember(accountId: string, userId: string, action: 'add' | 'remove'): Promise<Account> {
-      await delay(80);
+      await fetchApi('accounts?action=member', {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId,
+          userId,
+          remove: action === 'remove',
+        }),
+      });
+
       const accounts = db.getAccounts();
       const index = accounts.findIndex(a => a.id === accountId);
       if (index === -1) throw new Error('Cuenta no encontrada');
@@ -356,27 +417,21 @@ export const api = {
         activoOnly?: boolean;
       }
     ): Promise<Product[]> {
-      await delay(70);
-      const all = db.getProducts();
-      let filtered = all.filter(p => p.cuenta_id === accountId);
+      const neonProducts = await fetchApi<Product[]>(`products?cuenta_id=${accountId}`);
+      let all = neonProducts && Array.isArray(neonProducts) ? neonProducts : db.getProducts().filter(p => p.cuenta_id === accountId);
 
       if (filters?.activoOnly) {
-        filtered = filtered.filter(p => p.activo !== false);
+        all = all.filter(p => p.activo !== false);
       }
-
       if (filters?.laboratorio && filters.laboratorio.trim()) {
-        filtered = filtered.filter(
-          p => p.laboratorio.toLowerCase() === filters.laboratorio!.toLowerCase().trim()
-        );
+        all = all.filter(p => p.laboratorio.toLowerCase() === filters.laboratorio!.toLowerCase().trim());
       }
-
       if (filters?.categoria && filters.categoria.trim() && filters.categoria !== 'Todas') {
-        filtered = filtered.filter(p => p.categoria === filters.categoria);
+        all = all.filter(p => p.categoria === filters.categoria);
       }
-
       if (filters?.search && filters.search.trim()) {
         const q = filters.search.toLowerCase().trim();
-        filtered = filtered.filter(
+        all = all.filter(
           p =>
             p.nombre.toLowerCase().includes(q) ||
             p.laboratorio.toLowerCase().includes(q) ||
@@ -384,17 +439,27 @@ export const api = {
         );
       }
 
-      return filtered;
+      return all;
     },
 
     async getById(id: string): Promise<Product | null> {
-      await delay(40);
       const all = db.getProducts();
       return all.find(p => p.id === id) || null;
     },
 
     async create(productData: Omit<Product, 'id'>): Promise<Product> {
-      await delay(100);
+      const created = await fetchApi<Product>('products', {
+        method: 'POST',
+        body: JSON.stringify(productData),
+      });
+
+      if (created) {
+        const all = db.getProducts().filter(p => p.id !== created.id);
+        all.unshift(created);
+        db.saveProducts(all);
+        return created;
+      }
+
       const all = db.getProducts();
       const newProduct: Product = {
         ...productData,
@@ -406,7 +471,17 @@ export const api = {
     },
 
     async update(id: string, data: Partial<Product>): Promise<Product> {
-      await delay(90);
+      const updated = await fetchApi<Product>('products', {
+        method: 'PUT',
+        body: JSON.stringify({ id, ...data }),
+      });
+
+      if (updated) {
+        const all = db.getProducts().map(p => p.id === id ? { ...p, ...updated } : p);
+        db.saveProducts(all);
+        return updated;
+      }
+
       const all = db.getProducts();
       const index = all.findIndex(p => p.id === id);
       if (index === -1) throw new Error('Producto no encontrado');
@@ -417,18 +492,14 @@ export const api = {
     },
 
     async delete(id: string): Promise<boolean> {
-      await delay(80);
-      let all = db.getProducts();
-      all = all.filter(p => p.id !== id);
+      await fetchApi(`products?id=${id}`, { method: 'DELETE' });
+      let all = db.getProducts().filter(p => p.id !== id);
       db.saveProducts(all);
       return true;
     },
   },
 
   orders: {
-    /**
-     * Server-side paginated query for recent orders (up to 50 newest)
-     */
     async getByAccount(
       accountId: string,
       options: {
@@ -438,12 +509,8 @@ export const api = {
         laboratorio?: string;
       } = {}
     ): Promise<PaginatedResponse<Order>> {
-      await delay(100);
-      const page = options.page || 1;
-      const limit = options.limit || 50;
-
-      const all = db.getOrders();
-      let accountOrders = all.filter(o => o.cuenta_id === accountId);
+      const neonOrders = await fetchApi<Order[]>(`orders?cuenta_id=${accountId}`);
+      let accountOrders = neonOrders && Array.isArray(neonOrders) ? neonOrders : db.getOrders().filter(o => o.cuenta_id === accountId);
 
       if (options.laboratorio && options.laboratorio.trim()) {
         accountOrders = accountOrders.filter(
@@ -457,25 +524,19 @@ export const api = {
           o =>
             o.numero.toLowerCase().includes(q) ||
             o.laboratorio.toLowerCase().includes(q) ||
-            o.items.some(i => i.nombre.toLowerCase().includes(q))
+            (o.observaciones && o.observaciones.toLowerCase().includes(q))
         );
       }
 
-      // Sort newest first by fecha and createdAt
-      accountOrders.sort((a, b) => {
-        const dateA = new Date(a.fecha + 'T12:00:00Z').getTime();
-        const dateB = new Date(b.fecha + 'T12:00:00Z').getTime();
-        if (dateB !== dateA) return dateB - dateA;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
-
+      const page = options.page || 1;
+      const limit = options.limit || 50;
       const total = accountOrders.length;
       const totalPages = Math.ceil(total / limit) || 1;
-      const startIndex = (page - 1) * limit;
-      const paginatedData = accountOrders.slice(startIndex, startIndex + limit);
+      const start = (page - 1) * limit;
+      const data = accountOrders.slice(start, start + limit);
 
       return {
-        data: paginatedData,
+        data,
         total,
         page,
         limit,
@@ -483,118 +544,95 @@ export const api = {
       };
     },
 
-    /**
-     * Calculates metrics strictly on the server layer:
-     * - total orders
-     * - orders in current month
-     * - distinct laboratories used in orders
-     */
-    async getMetrics(accountId: string): Promise<OrderMetrics> {
-      await delay(90);
+    async getById(id: string): Promise<Order | undefined> {
+      const neonOrder = await fetchApi<Order>(`orders?id=${id}`);
+      if (neonOrder) return neonOrder;
       const all = db.getOrders();
-      const accountOrders = all.filter(o => o.cuenta_id === accountId);
+      return all.find(o => o.id === id);
+    },
 
-      const totalPedidos = accountOrders.length;
+    async getMetrics(accountId: string): Promise<OrderMetrics> {
+      const res = await this.getByAccount(accountId, { limit: 1000 });
+      const orders = res.data;
 
-      // Current Month calculation (YYYY-MM)
+      const totalPedidos = orders.length;
+
       const now = new Date();
       const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1; // 1-12
+      const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+      const yearMonthPrefix = `${currentYear}-${currentMonth}`;
 
-      let pedidosMesActual = 0;
-      const labSet = new Set<string>();
+      const pedidosMesActual = orders.filter(o => o.fecha.startsWith(yearMonthPrefix)).length;
 
-      accountOrders.forEach(ord => {
-        // Date format: YYYY-MM-DD
-        if (ord.fecha) {
-          const [yStr, mStr] = ord.fecha.split('-');
-          const y = parseInt(yStr, 10);
-          const m = parseInt(mStr, 10);
-          if (y === currentYear && m === currentMonth) {
-            pedidosMesActual++;
-          }
-        }
-
-        // Distinct laboratories (including items' laboratories or order's laboratory)
-        if (ord.laboratorio && ord.laboratorio.trim()) {
-          labSet.add(ord.laboratorio.trim().toLowerCase());
-        }
-        ord.items.forEach(it => {
-          if (it.laboratorio && it.laboratorio.trim()) {
-            labSet.add(it.laboratorio.trim().toLowerCase());
-          }
-        });
-      });
+      const labsSet = new Set(
+        orders.map(o => o.laboratorio.trim()).filter(lab => lab.length > 0)
+      );
+      const laboratoriosDistintos = labsSet.size;
 
       return {
         totalPedidos,
         pedidosMesActual,
-        laboratoriosDistintos: labSet.size,
+        laboratoriosDistintos,
       };
     },
 
-    async getById(id: string): Promise<Order> {
-      await delay(80);
-      const all = db.getOrders();
-      const order = all.find(o => o.id === id);
-      if (!order) {
-        // Real 404 simulation
-        const err: any = new Error('No encontramos este pedido');
-        err.statusCode = 404;
-        throw err;
-      }
-      return order;
-    },
-
-    async create(orderData: Omit<Order, 'id' | 'numero' | 'createdAt'>): Promise<Order> {
-      await delay(140);
-      const all = db.getOrders();
+    async create(orderData: Omit<Order, 'id' | 'numero' | 'estado' | 'createdAt'>): Promise<Order> {
       const year = new Date().getFullYear();
+      const all = db.getOrders();
       const orderCountThisYear = all.filter(o => o.fecha.startsWith(String(year))).length + 1;
       const orderNumber = `OC-${year}-${String(orderCountThisYear).padStart(4, '0')}`;
 
-      const newOrder: Order = {
+      const payload = {
         ...orderData,
-        id: `ord-${Date.now()}`,
         numero: orderNumber,
-        estado: 'Emitida',
-        createdAt: new Date().toISOString(),
+        estado: 'Emitida' as const,
       };
 
+      const created = await fetchApi<Order>('orders', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (created) {
+        all.unshift(created);
+        db.saveOrders(all);
+        return created;
+      }
+
+      const newOrder: Order = {
+        ...payload,
+        id: `ord-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
       all.unshift(newOrder);
       db.saveOrders(all);
       return newOrder;
     },
 
     async update(id: string, data: Partial<Order>): Promise<Order> {
-      await delay(120);
-      const all = db.getOrders();
-      const index = all.findIndex(o => o.id === id);
-      if (index === -1) {
-        const err: any = new Error('No encontramos este pedido para actualizar');
-        err.statusCode = 404;
-        throw err;
+      const updated = await fetchApi<Order>('orders', {
+        method: 'PUT',
+        body: JSON.stringify({ id, ...data }),
+      });
+
+      if (updated) {
+        const all = db.getOrders().map(o => o.id === id ? { ...o, ...updated } : o);
+        db.saveOrders(all);
+        return updated;
       }
 
-      all[index] = {
-        ...all[index],
-        ...data,
-        updatedAt: new Date().toISOString(),
-      };
+      const all = db.getOrders();
+      const index = all.findIndex(o => o.id === id);
+      if (index === -1) throw new Error('No encontramos este pedido');
+
+      all[index] = { ...all[index], ...data, updatedAt: new Date().toISOString() };
       db.saveOrders(all);
       return all[index];
     },
 
     async delete(id: string): Promise<boolean> {
-      await delay(100);
-      let all = db.getOrders();
-      const initialLen = all.length;
-      all = all.filter(o => o.id !== id);
-      if (all.length === initialLen) {
-        const err: any = new Error('No encontramos este pedido');
-        err.statusCode = 404;
-        throw err;
-      }
+      await fetchApi(`orders?id=${id}`, { method: 'DELETE' });
+      let all = db.getOrders().filter(o => o.id !== id);
       db.saveOrders(all);
       return true;
     },
@@ -602,19 +640,31 @@ export const api = {
 
   suppliers: {
     async getByAccount(accountId: string): Promise<Supplier[]> {
-      await delay(60);
-      const all = db.getSuppliers();
-      return all.filter(s => s.cuenta_id === accountId);
+      const neonSuppliers = await fetchApi<Supplier[]>(`suppliers?cuenta_id=${accountId}`);
+      if (neonSuppliers && Array.isArray(neonSuppliers)) {
+        return neonSuppliers;
+      }
+      return db.getSuppliers().filter(s => s.cuenta_id === accountId);
     },
 
     async getById(id: string): Promise<Supplier | null> {
-      await delay(40);
       const all = db.getSuppliers();
       return all.find(s => s.id === id) || null;
     },
 
     async create(supplierData: Omit<Supplier, 'id' | 'createdAt'>): Promise<Supplier> {
-      await delay(90);
+      const created = await fetchApi<Supplier>('suppliers', {
+        method: 'POST',
+        body: JSON.stringify(supplierData),
+      });
+
+      if (created) {
+        const all = db.getSuppliers().filter(s => s.id !== created.id);
+        all.unshift(created);
+        db.saveSuppliers(all);
+        return created;
+      }
+
       const all = db.getSuppliers();
       const newSupplier: Supplier = {
         ...supplierData,
@@ -627,37 +677,29 @@ export const api = {
     },
 
     async update(id: string, data: Partial<Supplier>): Promise<Supplier> {
-      await delay(80);
+      const updated = await fetchApi<Supplier>('suppliers', {
+        method: 'PUT',
+        body: JSON.stringify({ id, ...data }),
+      });
+
+      if (updated) {
+        const all = db.getSuppliers().map(s => s.id === id ? { ...s, ...updated } : s);
+        db.saveSuppliers(all);
+        return updated;
+      }
+
       const all = db.getSuppliers();
       const index = all.findIndex(s => s.id === id);
       if (index === -1) throw new Error('Proveedor no encontrado');
 
-      const oldName = all[index].nombre;
       all[index] = { ...all[index], ...data };
       db.saveSuppliers(all);
-
-      // If supplier name changed, also update products associated with it
-      if (data.nombre && data.nombre.trim() !== oldName) {
-        const products = db.getProducts();
-        let changed = false;
-        products.forEach(p => {
-          if (p.cuenta_id === all[index].cuenta_id && p.laboratorio.toLowerCase() === oldName.toLowerCase()) {
-            p.laboratorio = data.nombre!.trim();
-            changed = true;
-          }
-        });
-        if (changed) {
-          db.saveProducts(products);
-        }
-      }
-
       return all[index];
     },
 
     async delete(id: string): Promise<boolean> {
-      await delay(80);
-      let all = db.getSuppliers();
-      all = all.filter(s => s.id !== id);
+      await fetchApi(`suppliers?id=${id}`, { method: 'DELETE' });
+      let all = db.getSuppliers().filter(s => s.id !== id);
       db.saveSuppliers(all);
       return true;
     },
@@ -665,13 +707,26 @@ export const api = {
 
   categories: {
     async getByAccount(accountId: string): Promise<Category[]> {
-      await delay(50);
-      const all = db.getCategories();
-      return all.filter(c => c.cuenta_id === accountId);
+      const neonCategories = await fetchApi<Category[]>(`categories?cuenta_id=${accountId}`);
+      if (neonCategories && Array.isArray(neonCategories)) {
+        return neonCategories;
+      }
+      return db.getCategories().filter(c => c.cuenta_id === accountId);
     },
 
     async create(categoryData: Omit<Category, 'id' | 'createdAt'>): Promise<Category> {
-      await delay(80);
+      const created = await fetchApi<Category>('categories', {
+        method: 'POST',
+        body: JSON.stringify(categoryData),
+      });
+
+      if (created) {
+        const all = db.getCategories().filter(c => c.id !== created.id);
+        all.push(created);
+        db.saveCategories(all);
+        return created;
+      }
+
       const all = db.getCategories();
       const newCat: Category = {
         ...categoryData,
@@ -684,37 +739,29 @@ export const api = {
     },
 
     async update(id: string, data: Partial<Category>): Promise<Category> {
-      await delay(70);
+      const updated = await fetchApi<Category>('categories', {
+        method: 'PUT',
+        body: JSON.stringify({ id, ...data }),
+      });
+
+      if (updated) {
+        const all = db.getCategories().map(c => c.id === id ? { ...c, ...updated } : c);
+        db.saveCategories(all);
+        return updated;
+      }
+
       const all = db.getCategories();
       const index = all.findIndex(c => c.id === id);
       if (index === -1) throw new Error('Categoría no encontrada');
 
-      const oldName = all[index].nombre;
       all[index] = { ...all[index], ...data };
       db.saveCategories(all);
-
-      // If category name changed, update products using this category
-      if (data.nombre && data.nombre.trim() !== oldName) {
-        const products = db.getProducts();
-        let changed = false;
-        products.forEach(p => {
-          if (p.cuenta_id === all[index].cuenta_id && p.categoria === oldName) {
-            p.categoria = data.nombre!.trim();
-            changed = true;
-          }
-        });
-        if (changed) {
-          db.saveProducts(products);
-        }
-      }
-
       return all[index];
     },
 
     async delete(id: string): Promise<boolean> {
-      await delay(70);
-      let all = db.getCategories();
-      all = all.filter(c => c.id !== id);
+      await fetchApi(`categories?id=${id}`, { method: 'DELETE' });
+      let all = db.getCategories().filter(c => c.id !== id);
       db.saveCategories(all);
       return true;
     },
