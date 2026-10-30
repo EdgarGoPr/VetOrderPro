@@ -32,6 +32,12 @@ export function formatUnitNatural(cantidad: number, unidad: ProductUnit): string
   if (u === 'bolsa') {
     return qty === 1 ? '1 bolsa' : `${qty} bolsas`;
   }
+  if (u === 'balde') {
+    return qty === 1 ? '1 balde' : `${qty} baldes`;
+  }
+  if (u === 'pomo') {
+    return qty === 1 ? '1 pomo' : `${qty} pomos`;
+  }
   return `${qty} ${unidad}`;
 }
 

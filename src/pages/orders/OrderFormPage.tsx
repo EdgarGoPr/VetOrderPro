@@ -670,8 +670,10 @@ export const OrderFormPage: React.FC = () => {
             >
               <option value="Frasco">Frasco</option>
               <option value="Bidón">Bidón</option>
+              <option value="Balde">Balde</option>
               <option value="Bolsa">Bolsa</option>
               <option value="Caja">Caja</option>
+              <option value="Pomo">Pomo</option>
               <option value="Unidad">Unidad</option>
               <option value="dosis">Dosis</option>
             </Select>
