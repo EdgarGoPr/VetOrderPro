@@ -46,13 +46,25 @@ Este directorio contiene la arquitectura y los scripts listos para desplegar la 
 5. Selecciona la versión de PostgreSQL recomendada (**PostgreSQL 16** o 15).
 6. Haz clic en **"Create Project"**.
 
-### 2. Ejecutar el Esquema (`schema.sql`)
+### Opción A: Despliegue Automatizado con un solo comando (Recomendado)
+
+Si configuraste tu archivo `.env` con la variable `DATABASE_URL`:
+```bash
+npm run db:migrate
+```
+Este script se conecta directamente a Neon mediante SSL, ejecuta `schema.sql`, aplica `seed.sql` y valida el conteo de registros en consola.
+
+---
+
+### Opción B: Despliegue Manual desde la Consola Web de Neon
+
+#### 1. Ejecutar el Esquema (`schema.sql`)
 1. En el panel de control de tu proyecto en Neon, haz clic en la pestaña lateral **"SQL Editor"**.
 2. Abre el archivo local [`database/schema.sql`](./schema.sql), copia todo su contenido y pégalo en el editor de Neon.
 3. Haz clic en el botón verde **"Run"** (o presiona `Ctrl + Enter`).
 4. Verás la confirmación de creación de todas las tablas, índices, disparadores y vistas.
 
-### 3. Cargar los Datos Iniciales (`seed.sql`)
+#### 2. Cargar los Datos Iniciales (`seed.sql`)
 1. En el mismo **SQL Editor** de Neon, abre una nueva pestaña de consulta.
 2. Abre el archivo local [`database/seed.sql`](./seed.sql), copia todo su contenido y pégalo en el editor.
 3. Haz clic en **"Run"**.
