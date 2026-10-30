@@ -9,6 +9,7 @@ import {
   Check,
   RotateCcw,
   UserPlus,
+  Loader2,
 } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
@@ -80,6 +81,7 @@ export const AccountsPage: React.FC = () => {
   const [editUserPassword, setEditUserPassword] = useState<string>('');
   const [editUserAccountIds, setEditUserAccountIds] = useState<string[]>([]);
   const [savingEditUser, setSavingEditUser] = useState<boolean>(false);
+  const [togglingMemberId, setTogglingMemberId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -173,9 +175,22 @@ export const AccountsPage: React.FC = () => {
 
   // Toggle user membership in the active account
   const handleToggleMember = async (userId: string) => {
-    if (!activeAccount) return;
-    const isMember = activeAccount.miembros?.includes(userId);
+    if (!activeAccount || togglingMemberId) return;
+
+    const currentMiembros = activeAccount.miembros || [];
+    const isMember = currentMiembros.includes(userId);
     const action = isMember ? 'remove' : 'add';
+
+    const nextMiembros = isMember
+      ? currentMiembros.filter(id => id !== userId)
+      : [...currentMiembros, userId];
+
+    // Optimistic UI update: instantly update activeAccount so the checkbox changes with 0ms delay
+    setActiveAccount({
+      ...activeAccount,
+      miembros: nextMiembros,
+    });
+    setTogglingMemberId(userId);
 
     try {
       await api.accounts.assignMember(activeAccount.id, userId, action);
@@ -185,7 +200,14 @@ export const AccountsPage: React.FC = () => {
         'info'
       );
     } catch (err: any) {
+      // Revert optimistic update on failure
+      setActiveAccount({
+        ...activeAccount,
+        miembros: currentMiembros,
+      });
       toast(err.message || 'Error actualizando miembros', 'error');
+    } finally {
+      setTogglingMemberId(null);
     }
   };
 
@@ -287,26 +309,17 @@ export const AccountsPage: React.FC = () => {
         password: editUserPassword.trim() ? editUserPassword.trim() : undefined,
       });
 
-      // Update account memberships for this user
-      const allAccounts = db.getAccounts();
-      let changed = false;
-      allAccounts.forEach(acc => {
-        if (!acc.miembros) acc.miembros = [];
-        const isCurrently = acc.miembros.includes(editingUser.id);
+      // Update account memberships for this user in Neon & local
+      for (const acc of accounts) {
+        const isCurrently = Boolean(acc.miembros?.includes(editingUser.id));
         const shouldBe = editUserAccountIds.includes(acc.id);
         if (shouldBe && !isCurrently) {
-          acc.miembros.push(editingUser.id);
-          changed = true;
+          await api.accounts.assignMember(acc.id, editingUser.id, 'add');
         } else if (!shouldBe && isCurrently) {
-          acc.miembros = acc.miembros.filter(id => id !== editingUser.id);
-          changed = true;
+          await api.accounts.assignMember(acc.id, editingUser.id, 'remove');
         }
-      });
-
-      if (changed) {
-        db.saveAccounts(allAccounts);
-        await refreshAccounts();
       }
+      await refreshAccounts();
 
       await fetchUsers();
       toast('Usuario actualizado exitosamente', 'success');
@@ -596,13 +609,17 @@ export const AccountsPage: React.FC = () => {
                     )}
 
                     <div
-                      className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
+                      className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border transition-all ${
                         isAssigned
-                          ? 'bg-[#1f4e38] border-[#1f4e38] text-white'
-                          : 'border-stone-300 bg-white text-transparent'
+                          ? 'bg-[#1f4e38] border-[#1f4e38] text-white shadow-xs'
+                          : 'border-stone-300 bg-white text-transparent group-hover:border-stone-400'
                       }`}
                     >
-                      <Check className="w-3.5 h-3.5" />
+                      {togglingMemberId === u.id ? (
+                        <Loader2 className={`w-3.5 h-3.5 animate-spin ${isAssigned ? 'text-white' : 'text-[#1f4e38]'}`} />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
                     </div>
                   </div>
                 </div>

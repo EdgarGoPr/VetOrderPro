@@ -23,21 +23,41 @@ export default async function handler(req, res) {
 
     // POST /api/accounts
     if (method === 'POST') {
-      const { action, accountId, userId } = req.query || req.body || {};
+      const q = req.query || {};
+      let b = req.body || {};
+      if (typeof b === 'string') {
+        try {
+          b = JSON.parse(b);
+        } catch {
+          b = {};
+        }
+      }
+      const action = q.action || b.action;
+      const accountId = q.accountId || b.accountId;
+      const userId = q.userId || b.userId;
+      const remove = q.remove !== undefined 
+        ? (q.remove === 'true' || q.remove === true) 
+        : Boolean(b.remove);
 
-      // Toggle member: action=assign-member
-      if (action === 'member' || (accountId && userId)) {
-        const { remove } = req.body || {};
+      // Toggle member: action=member or (accountId && userId && no new account name)
+      if (action === 'member' || (accountId && userId && !b.nombre)) {
+        if (!accountId || !userId) {
+          return res.status(400).json({ error: 'accountId y userId son requeridos.' });
+        }
+
         if (remove) {
-          await sql`DELETE FROM account_members WHERE account_id = ${accountId} AND user_id = ${userId};`;
-          return res.status(200).json({ success: true, action: 'removed' });
+          await sql`
+            DELETE FROM account_members
+            WHERE account_id = ${accountId} AND user_id = ${userId};
+          `;
+          return res.status(200).json({ success: true, action: 'removed', accountId, userId });
         } else {
           await sql`
             INSERT INTO account_members (account_id, user_id)
             VALUES (${accountId}, ${userId})
             ON CONFLICT (account_id, user_id) DO NOTHING;
           `;
-          return res.status(200).json({ success: true, action: 'added' });
+          return res.status(200).json({ success: true, action: 'added', accountId, userId });
         }
       }
 
